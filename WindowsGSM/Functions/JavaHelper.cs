@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Net;
@@ -10,8 +10,8 @@ namespace WindowsGSM.Functions
     public class JavaHelper
     {
         private static string JavaAbsoluteInstallPath = Path.Combine(GetProgramFilesAbsolutePath(), "Java");
-        private static string JreAbsoluteInstallPath = Path.Combine(JavaAbsoluteInstallPath, "jre1.8.0_241");
-        private static string JreInstallFileName = $"jre-8u241-windows-{(Environment.Is64BitOperatingSystem ? "x64" : "i586")}.exe";
+        private static string JreAbsoluteInstallPath = Path.Combine(JavaAbsoluteInstallPath, "jre1.8.0_351");
+        private static string JreInstallFileName = $"jre-8u351-windows-{(Environment.Is64BitOperatingSystem ? "x64" : "i586")}.exe";
         private static string JreDownloadLink = Environment.Is64BitOperatingSystem ?
                 "https://javadl.oracle.com/webapps/download/AutoDL?BundleId=241536_1f5b5a70bf22433b84d0e960903adac8" :
                 "https://javadl.oracle.com/webapps/download/AutoDL?BundleId=241534_1f5b5a70bf22433b84d0e960903adac8";
@@ -31,11 +31,15 @@ namespace WindowsGSM.Functions
         {
             return FindNewestJavaExecutableAbsolutePath();
         }
+        public static string FindJava8ExecutableAbsolutePath()
+        {
+            return FindNewestJava8ExecutableAbsolutePath();
+        }
         public static async Task<JREDownloadTaskResult> DownloadJREToServer(string serverID)
         {
             string serverFilesPath = Functions.ServerPath.GetServersServerFiles(serverID);
             
-            //Download jre-8u231-windows-i586-iftw.exe from https://www.java.com/en/download/manual.jsp
+            //Download jre-8u351-windows-i586-iftw.exe from https://www.java.com/en/download/manual.jsp
             string jrePath = Path.Combine(serverFilesPath, JreInstallFileName);
             JREDownloadTaskResult result;
             result.installed = true;
@@ -268,8 +272,81 @@ namespace WindowsGSM.Functions
 
             return javaExecutables[0].javaExecutableAbsolutePath;
         }
+		
+		private static string FindJava8ExecutableAbsolutePath(string javaDirectoryAbsolutePath)
+        {
+            if (!Directory.Exists(javaDirectoryAbsolutePath))
+            {
+                return string.Empty;
+            }
+
+            List<string> javaRuntimeDirectories = new List<string>(Directory.EnumerateDirectories(javaDirectoryAbsolutePath));
+            if (javaRuntimeDirectories.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            List<JavaExecutable> javaExecutables = new List<JavaExecutable>();
+            foreach (string javaRuntimePath in javaRuntimeDirectories)
+            {
+                string javaExecutableAbsolutePath = FindJavaExecutableAbsolutePathInJavaRuntimeDirectory(javaRuntimePath);
+                if (javaExecutableAbsolutePath.Length > 0)
+                {
+                    JavaExecutable javaExecutable = new JavaExecutable(javaExecutableAbsolutePath, QueryJavaVersion(javaExecutableAbsolutePath));
+					int javaVersionInt3 = int.Parse(Regex.Replace(javaExecutable.javaVersionString.Split(".")[3], "[^0-9.]", ""));
+					int javaVersionInt2 = int.Parse(Regex.Replace(javaExecutable.javaVersionString.Split(".")[2], "[^0-9.]", ""));
+					if (javaVersionInt2 <= 8)
+					{
+						if (javaVersionInt3 >= 333)
+						{
+							if (javaExecutable.javaVersionString.Length == 0)
+							{
+								continue;
+							}
+						}
+					}
+
+                    javaExecutables.Add(javaExecutable);
+                }
+            }
+
+            if (javaExecutables.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            // sort by version and reverse result so that the most recent version is the first entry in the array
+            javaExecutables.Sort();
+            javaExecutables.Reverse();
+
+            return javaExecutables[0].javaExecutableAbsolutePath;
+        }
 
         private static string FindNewestJavaExecutableAbsolutePath()
+        {
+            string javaDirectoryAbsolutePath = Environment.GetEnvironmentVariable("JAVA_HOME");
+            if (javaDirectoryAbsolutePath == null)
+            {
+                javaDirectoryAbsolutePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Java");
+            }
+            string javaRuntimeAbsolutePath = FindJavaExecutableAbsolutePath(javaDirectoryAbsolutePath);
+
+            if (javaRuntimeAbsolutePath.Length > 0)
+            {
+                return javaRuntimeAbsolutePath;
+            }
+
+            if (!Environment.Is64BitOperatingSystem)
+            {
+                return string.Empty;
+            }
+
+            //call GetProgramFilesAbsolutePath in case this is a x86 process running on an x64 os
+            javaDirectoryAbsolutePath = Path.Combine(GetProgramFilesAbsolutePath(), "Java");
+            return FindJavaExecutableAbsolutePath(javaDirectoryAbsolutePath);
+        }
+		
+		private static string FindNewestJava8ExecutableAbsolutePath()
         {
             string javaDirectoryAbsolutePath = Environment.GetEnvironmentVariable("JAVA_HOME");
             if (javaDirectoryAbsolutePath == null)
